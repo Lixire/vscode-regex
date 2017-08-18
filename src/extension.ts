@@ -8,16 +8,18 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 export function activate(context: vscode.ExtensionContext) {
-    
-    const regexRegex = /(^|\s|[()={},:?;])(\/((?:\\\/|\[[^\]]*\]|[^/])+)\/([gimuy]*))(\s|[()={},:?;]|$)/g;
-    const haxeRegexRegex = /(^|\s|[()={},:?;])(~\/((?:\\\/|\[[^\]]*\]|[^/])+)\/([gimsu]*))(\s|[.()={},:?;]|$)/g;
+
+    const regexRegex = /^(\s*)("regexp":) "(.+)",$/g;
+    //const aaaaRegexRegex = /^(\s*)("pattern":)(\s+)\[((\s*{\s*)"regexp":(.*)(,)?\n([^}]*)}(,)?)+/g;
+    const dumbRegex = /.*/g;
+    const multiRegexRegex = /^(\s*)"pattern":\s*\[/g;
     const regexHighlight = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(100,100,100,.35)' });
     const matchHighlight = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,255,0,.35)' });
 
     const matchesFilePath = context.asAbsolutePath('resources/sample.txt');
     const matchesFileContent = fs.readFileSync(matchesFilePath, 'utf8');
     const legacyMatchesFileUri = vscode.Uri.parse(`untitled:${path.sep}Regex Matches`);
-    const languages = ['javascript', 'typescript', 'haxe'];
+    const languages = ['json'];
 
     const decorators = new Map<vscode.TextEditor, RegexMatchDecorator>();
 
@@ -37,11 +39,11 @@ export function activate(context: vscode.ExtensionContext) {
         return matches.map(match => new vscode.CodeLens(match.range, {
             title: 'Test Regex...',
             command: 'extension.toggleRegexPreview',
-            arguments: [ match ]
+            arguments: [match]
         }));
     }
 
-    let addGMEnabled = false;
+    let addGMEnabled = true;
     const toggleGM = vscode.window.createStatusBarItem();
     toggleGM.command = 'regexpreview.toggleGM';
     context.subscriptions.push(toggleGM);
@@ -92,11 +94,11 @@ export function activate(context: vscode.ExtensionContext) {
         return fileExists(legacyMatchesFileUri.fsPath).then(exists => {
             return (exists ? vscode.workspace.openTextDocument(legacyMatchesFileUri.with({ scheme: 'file' })) :
                 vscode.workspace.openTextDocument({ language: 'text', content: matchesFileContent }))
-            .then(document => {
-                return vscode.window.showTextDocument(document, column, true);
-            }).then(editor => {
-                updateDecorators(findRegexEditor(), initialRegexMatch);
-            });
+                .then(document => {
+                    return vscode.window.showTextDocument(document, column, true);
+                }).then(editor => {
+                    updateDecorators(findRegexEditor(), initialRegexMatch);
+                });
         }).then(null, reason => {
             vscode.window.showErrorMessage(reason);
         });
@@ -120,7 +122,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!enabled) {
             return;
         }
-        
+
         // TODO: figure out why originEditor.document is sometimes a different object
         if (regexEditor && initialRegexMatch && initialRegexMatch.document && initialRegexMatch.document.uri.toString() === regexEditor.document.uri.toString()) {
             initialRegexMatch.document = regexEditor.document;
@@ -205,10 +207,12 @@ export function activate(context: vscode.ExtensionContext) {
                 this.update();
             }));
 
-            this.disposables.push({ dispose: () => {
-                matchEditor.setDecorations(matchHighlight, []);
-                matchEditor.setDecorations(regexHighlight, []);
-            }});
+            this.disposables.push({
+                dispose: () => {
+                    matchEditor.setDecorations(matchHighlight, []);
+                    matchEditor.setDecorations(regexHighlight, []);
+                }
+            });
         }
 
         public apply(stableRegexEditor?: vscode.TextEditor, stableRegexMatch?: RegexMatch) {
@@ -238,7 +242,7 @@ export function activate(context: vscode.ExtensionContext) {
             this.matchEditor.setDecorations(matchHighlight, matches.map(match => match.range));
 
             if (regexEditor) {
-                regexEditor.setDecorations(regexHighlight, (this.stableRegexMatch || regexEditor !== vscode.window.activeTextEditor) && regex ? [ regex.range ] : []);
+                regexEditor.setDecorations(regexHighlight, (this.stableRegexMatch || regexEditor !== vscode.window.activeTextEditor) && regex ? [regex.range] : []);
             }
         }
     }
@@ -257,11 +261,11 @@ export function activate(context: vscode.ExtensionContext) {
         const text = line.text.substr(0, 1000);
 
         let match: RegExpExecArray | null;
-        let regex = getRegexRegex(editor.document.languageId);
+        let regex = getRegexRegex(true);
         regex.lastIndex = 0;
         while ((match = regex.exec(text)) && (match.index + match[1].length + match[2].length < anchor.character));
         if (match && match.index + match[1].length <= anchor.character) {
-            return createRegexMatch(editor.document, anchor.line, match);
+            return createRegexMatch(editor.document, anchor.line, match, 3);
         }
     }
 
@@ -269,44 +273,87 @@ export function activate(context: vscode.ExtensionContext) {
         const matches: RegexMatch[] = [];
         for (let i = 0; i < document.lineCount; i++) {
             const line = document.lineAt(i);
+            let regex = getRegexRegex(true);
             let match: RegExpExecArray | null;
-            let regex = getRegexRegex(document.languageId);
             regex.lastIndex = 0;
             const text = line.text.substr(0, 1000);
             while ((match = regex.exec(text))) {
-                const result = createRegexMatch(document, i, match);
+                if (match.length >= 4) {
+                    match[3] = match[3].split('\\\\').join('\\');
+                }
+                const result = createRegexMatch(document, i, match, 3);
                 if (result) {
                     matches.push(result);
                 }
             }
         }
+        // for multiline pms
+        let locationOfRegex = [];
+        for (let i = 0; i < document.lineCount; i++) {
+            const line = document.lineAt(i);
+            let regex = getRegexRegex(false);
+            let match: RegExpExecArray | null;
+            regex.lastIndex = 0;
+            const text = line.text.substr(0, 1000);
+            while ((match = regex.exec(text))) {
+                locationOfRegex.push(i);
+            }
+        }
+        
+        let documentText = JSON.parse(document.getText());
+        let problems = null;
+        if(documentText['contributes']){
+            problems = documentText['contributes']['problemMatchers'];
+        }
+        let counter = 0;
+        if (problems){
+            for(let i = 0; i < problems.length; i++){
+                if(problems[i]['pattern']){
+                    let multiReg = [];
+                    for (let j = 0; j < problems[i]['pattern'].length; ++j){
+                        if(problems[i]['pattern'][j]['regexp']){
+                            multiReg.push(problems[i]['pattern'][j]['regexp']);
+                        }
+                    }
+                    if (multiReg.length > 0) {
+                        if(problems[i]['pattern'][problems[i]['pattern'].length-1]['loop'] === true) {
+                            multiReg[multiReg.length - 1] = '('+multiReg[multiReg.length - 1]+'\\n?)+';
+                        }
+                        const out = RegExp(multiReg.join('\\n'));
+                        const result ={document:document, regex:out, range:new vscode.Range(locationOfRegex[counter], 0 ,locationOfRegex[counter], document.lineAt(locationOfRegex[counter]).text.length)};
+                        if(result){
+                            matches.push(result);
+                        }
+                    }
+                }
+                counter++
+            }
+        }
         return matches;
     }
 
-    function getRegexRegex(languageId: String) {
-        if (languageId == 'haxe') {
-            return haxeRegexRegex;
-        }
-        return regexRegex;
+    function getRegexRegex(flag: boolean) {
+        if (flag) return regexRegex;
+        return multiRegexRegex;
     }
 
-    function createRegexMatch(document: vscode.TextDocument, line: number, match: RegExpExecArray) {
-        const regex = createRegex(match[3], match[4]);
+    function createRegexMatch(document: vscode.TextDocument, line: number, match: RegExpExecArray, index: number) {
+        const regex = createRegex(match[index]);
         if (regex) {
             return {
                 document: document,
                 regex: regex,
-                range: new vscode.Range(line, match.index + match[1].length, line, match.index + match[1].length + match[2].length)
+                range: new vscode.Range(line, match.index, line, match.index + match[0].length + match[1].length  + match[index].length)
             };
         }
     }
 
-    function createRegex(pattern: string, flags: string) {
-            try {
-                return new RegExp(pattern, flags);
-            } catch (e) {
-                // discard
-            }
+    function createRegex(pattern: string) {
+        try {
+            return new RegExp(pattern);
+        } catch (e) {
+            // discard
+        }
     }
 
     function findMatches(regexMatch: RegexMatch, document: vscode.TextDocument) {
