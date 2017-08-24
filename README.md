@@ -2,11 +2,14 @@
 
 Shows the current regular expression's matches in a side-by-side document. This can be turned on/off with `Ctrl+Alt+M` (`⌥⌘M`).
 
-Global and multiline options can be added for evaluation with a side-by-side document through a status bar entry. This can be useful when the side-by-side document has multiple examples to match.
-
-![Regex Previewer in Action](images/in_action.gif)
+Global option can be added for evaluation with a side-by-side document through a status bar entry. This can be useful when the side-by-side document has multiple examples to match.
 
 ## Release Notes
+
+### 0.0.1 - fork
+- made to only work in json files for developing problem matchers
+- single & multiline pms can be highlighted 
+- matched problems are sent to problem panel to verify right message and location
 
 ### 0.1.0
 
