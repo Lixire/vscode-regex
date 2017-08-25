@@ -450,7 +450,6 @@ export function activate(context: vscode.ExtensionContext) {
                 regex.lastIndex++;
             }
         }
-        let editor = vscode.window.activeTextEditor;
         if (editor) {
             // send to problems
             diagnosticCollection.set(editor.document.uri, toAdd);
